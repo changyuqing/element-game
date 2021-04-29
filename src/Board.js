@@ -12,7 +12,6 @@ export default class Board extends React.Component {
         return <Square
             value={this.props.squares[i]}
             onClick={() => {
-                console.log('点击')
                 this.props.onClick(i);
             }}/>;
     }
@@ -37,13 +36,11 @@ export default class Board extends React.Component {
                         })
                     }
                 </div>
-
-
             )
         })
         if (this.props.arrow.isShow) {
             return (
-                <div style={{position: 'relative'}}>
+                <div style={{position: 'relative', width: '374px'}}>
                     {board}
                     <Direction onChangeDirection={(row, col) => this.props.onChangeDirection(row, col)}
                                row={this.props.arrow.row} col={this.props.arrow.col} shape={this.props.arrow.shape}/>
@@ -51,7 +48,7 @@ export default class Board extends React.Component {
             );
         } else if (this.props.choose.isShow) {
             return (
-                <div style={{position: 'relative'}}>
+                <div style={{position: 'relative', width: '374px'}}>
                     {board}
                     <DirectionChoose onChangeDirection={(row, col) => this.props.onChangeChoose(row, col)}
                                      row={this.props.choose.row} col={this.props.choose.col}/>
@@ -59,7 +56,7 @@ export default class Board extends React.Component {
             );
         } else {
             return (
-                <div style={{position: 'relative'}}>
+                <div style={{position: 'relative', width: '374px'}}>
                     {board}
                 </div>
             );

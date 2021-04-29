@@ -66,8 +66,8 @@ ul {
 .direction-square {
 
     font-weight: normal;
-    background-color: #ffffff00;
-    border-color: #ffffff00;
+    background-color: transparent;
+    border-color: transparent;
 }
 
 .element-number {
@@ -75,4 +75,20 @@ ul {
     font-size: 10px;
     right: 0;
     bottom: 0;
+}
+
+.square-fire {
+    color: #e25242;
+}
+
+.square-earth {
+    color: #f4a83f;
+}
+
+.square-wind {
+color: #9fb5b9;
+}
+
+.square-water {
+    color: #4496ef;
 }

@@ -6,10 +6,10 @@ export default class Game extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            history: [{squares: Array(9).fill(null)}],
-            stepNumber: 0,
-            xIsNext: true,
-            isAsc: true,
+            history: [],
+            stepNumber: -1,
+            saveFlag: -1,
+
 
             // 游戏开始摸的棋子数目
             elementNum: 1,
@@ -43,14 +43,99 @@ export default class Game extends React.Component {
 
     }
 
+    componentDidUpdate(prevProps, prevState) {
+        if (this.state.saveFlag !== prevState.saveFlag) {
+            this.saveAction();
+        }
+    }
+
+    recallAction() {
+        let {
+            elementNum,
+            squares,
+            bag,
+            element,
+            currentPlayer,
+            arrow,
+            status,
+            flowStep,
+            flowPath,
+            choose
+        } = this.state;
+        let curState = JSON.stringify({
+            elementNum,
+            squares,
+            bag,
+            element,
+            currentPlayer,
+            arrow,
+            status,
+            flowStep,
+            flowPath,
+            choose
+        });
+        let stepNumber = this.state.stepNumber;
+        let curHistory = this.state.history[stepNumber];
+        let HEADState = JSON.stringify(curHistory);
+
+        // 比较历史栈顶部的数据和当前的数据，
+        // 如果不一致，则用栈顶数据替代当前数据
+        // 如果数据一致，则历史栈出栈
+        if (curState !== HEADState) {
+            this.setState({
+                ...curHistory
+            })
+        } else {
+            this.setState({
+                stepNumber: stepNumber - 1,
+                ...this.state.history[stepNumber - 1]
+            })
+        }
+
+    }
+
+    saveAction() {
+        let {
+            elementNum,
+            squares,
+            bag,
+            element,
+            currentPlayer,
+            arrow,
+            status,
+            flowStep,
+            flowPath,
+            choose
+        } = this.state;
+        let stepNumber = this.state.stepNumber;
+        let history = this.state.history
+        this.setState({
+            stepNumber: stepNumber + 1,
+            history: history.slice(0, stepNumber + 1).concat([{
+                elementNum,
+                squares,
+                bag,
+                element,
+                currentPlayer,
+                arrow,
+                status,
+                flowStep,
+                flowPath,
+                choose
+            }])
+        })
+    }
+
     componentDidMount() {
         this.initPlayer();
+        this.setState({
+            saveFlag: Date.now()
+        })
     }
 
     handleClick(index) {
         let status = this.state.status;
         let squares = [...this.state.squares];
-        console.log('火', status)
         let element = {...this.state.element};
         let bag = [...this.state.bag];
         if (status === 'move') {
@@ -166,7 +251,6 @@ export default class Game extends React.Component {
                             return pre;
                         }
                     }, squares[centerIndex].value === '山')
-                    console.log('isMount', row, col, isMount)
                     if (isMount) {
                         squares[centerIndex].value = '山'
                         nineGrid.forEach(cur => {
@@ -278,6 +362,9 @@ export default class Game extends React.Component {
             bag,
             status
         })
+        this.setState({
+            saveFlag: Date.now()
+        })
 
     }
 
@@ -309,7 +396,9 @@ export default class Game extends React.Component {
                 return;
             }
         }
-
+        if (this.state.status !== 'init') {
+            this.toNextPlayer();
+        }
         let bag = [...this.state.bag];
         let elementNum = bag.reduce((pre, cur) => {
             return pre + cur;
@@ -335,7 +424,8 @@ export default class Game extends React.Component {
                 wind: results[2],
                 earth: results[3],
                 move: MAX_ELEMENT_NUM - num
-            }
+            },
+            saveFlag: Date.now()
         })
 
     }
@@ -349,6 +439,9 @@ export default class Game extends React.Component {
             let currentPlayer = this.state.currentPlayer;
             let index = squares.findIndex(item => item.value === currentPlayer);
             let [row, col] = getPositionByIndex(index);
+            if (isOutOfBoard(row + rowOffset, col + colOffset)) {
+                return;
+            }
             let nextIndex = getIndexByPosition(row + rowOffset, col + colOffset)
             let nextItem = squares[nextIndex];
             let isWind = false;
@@ -392,7 +485,7 @@ export default class Game extends React.Component {
             }
             if (nextItem.type === '') {
                 // 处理山挡路的问题
-                if (!isWind && (rowOffset & colOffset) === 1) {
+                if (!isWind && (rowOffset & colOffset) !== 0) {
                     let itemA = squares[getIndexByPosition(row + rowOffset, col)];
                     let itemB = squares[getIndexByPosition(row, col + colOffset)];
                     if (itemA.value === '山' && itemB.value === '山') {
@@ -431,6 +524,9 @@ export default class Game extends React.Component {
                         }
                     })
                 }
+                this.setState({
+                    saveFlag: Date.now()
+                })
             }
 
         } else if (status === 'flow') {
@@ -480,10 +576,15 @@ export default class Game extends React.Component {
                             col: col + colOffset
                         },
                         status: 'water'
+                    });
+                    this.setState({
+                        saveFlag: Date.now()
                     })
                 }
             }
         }
+
+
     }
 
     // 处理按钮导致的状态变化
@@ -573,31 +674,40 @@ export default class Game extends React.Component {
     }
 
     render() {
-        let history = this.state.history;
-        let current = history[this.state.stepNumber];
-
-
+        let screenWidth = window.screen.width;
+        let screenHeight = window.screen.height;
+        let scale = (screenWidth - 40) / 374;
+        if (screenWidth > screenHeight) {
+            scale = 1;
+        }
         return (
             <div className="game">
-                <div className="game-board">
-                    <Board
-                        squares={this.state.squares}
-                        arrow={this.state.arrow}
-                        choose={this.state.choose}
-                        onClick={i => {
-                            this.handleClick(i);
-                        }}
-                        onChangeDirection={
-                            (row, col) => {
-                                this.handleDirection(row, col);
+                <div style={{height: 374 * scale + 'px'}}>
+                    <div className="game-board"
+                         style={{
+                             transform: 'scale(' + scale + ')',
+                             transformOrigin: 'left top',
+                             width: 'min-content'
+                         }}>
+                        <Board
+                            squares={this.state.squares}
+                            arrow={this.state.arrow}
+                            choose={this.state.choose}
+                            onClick={i => {
+                                this.handleClick(i);
+                            }}
+                            onChangeDirection={
+                                (row, col) => {
+                                    this.handleDirection(row, col);
+                                }
                             }
-                        }
-                        onChangeChoose={
-                            (row, col) => {
-                                this.onChangeChoose([row, col]);
+                            onChangeChoose={
+                                (row, col) => {
+                                    this.onChangeChoose([row, col]);
+                                }
                             }
-                        }
-                    />
+                        />
+                    </div>
                 </div>
                 <div className="game-info">
                     <button onClick={() => this.changElementNum(-1)}>-</button>
@@ -611,7 +721,7 @@ export default class Game extends React.Component {
                     <button onClick={() => this.handleStatusChange('wind')}>风:{this.state.element.wind}</button>
                     <button onClick={() => this.handleStatusChange('water')}>水:{this.state.element.water}</button>
                     <button onClick={() => this.handleStatusChange('move')}>移动:{this.state.element.move}</button>
-                    <button onClick={() => this.toNextPlayer()}>换人</button>
+                    <button onClick={() => this.recallAction()}>撤回</button>
 
                 </div>
             </div>

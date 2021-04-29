@@ -8,7 +8,7 @@ export default function Square(props) {
         case 'water':
             return (
                 <button
-                    className='square'
+                    className={'square square-' + props.value.type}
                     onClick={
                         () => props.onClick()
                     }>
