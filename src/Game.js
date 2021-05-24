@@ -1,19 +1,18 @@
 import React from "react";
-import {getIndexByPosition, getPositionByIndex, isOutOfBoard, LINE_NUM, MAX_ELEMENT_NUM} from "./utils";
+import {getIndexByPosition, getPositionByIndex, isOutOfBoard, LINE_NUM, MAX_ELEMENT_NUM, mountCount} from "./utils";
 import Board from "./Board";
-
+let synchronizeData = null;
 export default class Game extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             history: [],
             stepNumber: -1,
-            saveFlag: -1,
 
 
             // 游戏开始摸的棋子数目
             elementNum: 1,
-            squares: Array(11 * 11).fill({type: '', value: '', number: 0}),
+            squares: Array(11 * 11).fill(0).map((_,index)=>({type: '', value: '', number: 0, elements:{},position:index})),
             bag: [40, 40, 40, 40],
             element: {
                 fire: 0,
@@ -43,11 +42,6 @@ export default class Game extends React.Component {
 
     }
 
-    componentDidUpdate(prevProps, prevState) {
-        if (this.state.saveFlag !== prevState.saveFlag) {
-            this.saveAction();
-        }
-    }
 
     recallAction() {
         let {
@@ -86,32 +80,19 @@ export default class Game extends React.Component {
                 ...curHistory
             })
         } else {
-            this.setState({
-                stepNumber: stepNumber - 1,
-                ...this.state.history[stepNumber - 1]
-            })
+            if(stepNumber>0){
+                this.setState({
+                    stepNumber: stepNumber - 1,
+                    ...this.state.history[stepNumber - 1]
+                })
+            }
+            
         }
 
     }
-
-    saveAction() {
-        let {
-            elementNum,
-            squares,
-            bag,
-            element,
-            currentPlayer,
-            arrow,
-            status,
-            flowStep,
-            flowPath,
-            choose
-        } = this.state;
-        let stepNumber = this.state.stepNumber;
-        let history = this.state.history
-        this.setState({
-            stepNumber: stepNumber + 1,
-            history: history.slice(0, stepNumber + 1).concat([{
+    updateDateAndSave(data,isSave = false){
+        if(!synchronizeData){
+            let {
                 elementNum,
                 squares,
                 bag,
@@ -122,15 +103,41 @@ export default class Game extends React.Component {
                 flowStep,
                 flowPath,
                 choose
-            }])
+            } = this.state;
+            synchronizeData = JSON.parse(JSON.stringify({
+                elementNum,
+                squares,
+                bag,
+                element,
+                currentPlayer,
+                arrow,
+                status,
+                flowStep,
+                flowPath,
+                choose
+            }));
+        }
+        synchronizeData = {
+            ...synchronizeData,
+            ...data
+        }
+        if(isSave){
+            this.saveAction(synchronizeData);
+        }
+        this.setState(data);
+    }
+    saveAction(data) {
+        
+        let stepNumber = this.state.stepNumber;
+        let history = this.state.history
+        this.setState({
+            stepNumber: stepNumber + 1,
+            history: history.slice(0, stepNumber + 1).concat([JSON.parse(JSON.stringify(data))])
         })
     }
 
     componentDidMount() {
         this.initPlayer();
-        this.setState({
-            saveFlag: Date.now()
-        })
     }
 
     handleClick(index) {
@@ -156,7 +163,11 @@ export default class Game extends React.Component {
                 squares[index] = {
                     type: 'fire',
                     value: '火',
-                    number: 1
+                    number: 1,
+                    element:{
+                        fire: 1
+                    },
+                    position: index
                 }
                 element.fire--;
 
@@ -175,7 +186,11 @@ export default class Game extends React.Component {
                         squares[index] = {
                             type: 'fire',
                             value: '火',
-                            number: 1
+                            number: 1,
+                            element:{
+                                fire: 1
+                            },
+                            position: index
                         }
                         return true;
                     }
@@ -223,47 +238,28 @@ export default class Game extends React.Component {
                 // 如果棋子在土元素上，则变成山
                 if (squares[index].type === 'earth') {
                     squares[index] = {
-                        type: 'earth',
-                        value: '山',
-                        number: 2
+                        type: 'mountain',
+                        number: 2,
+                        element:{
+                            earth:2
+                        },
+                        position: index
                     }
                 } else {
                     squares[index] = {
                         type: 'earth',
                         value: '土',
-                        number: 1
+                        number: 1,
+                        element:{
+                            earth:1
+                        },
+                        position: index
                     }
                 }
                 element.earth--;
 
                 // 山脉连锁
-                function earthToMount(centerIndex) {
-                    let [row, col] = getPositionByIndex(centerIndex);
-                    let nineGrid = [
-                        [-1, -1], [-1, 0], [-1, 1],
-                        [0, -1], [0, 1],
-                        [1, -1], [1, 0], [1, 1]
-                    ];
-                    let isMount = nineGrid.reduce((pre, cur) => {
-                        if (squares[getIndexByPosition(row + cur[0], col + cur[1])].value === '山') {
-                            return true;
-                        } else {
-                            return pre;
-                        }
-                    }, squares[centerIndex].value === '山')
-                    if (isMount) {
-                        squares[centerIndex].value = '山'
-                        nineGrid.forEach(cur => {
-                            let curIndex = getIndexByPosition(row + cur[0], col + cur[1]);
-                            let item = squares[curIndex];
-                            if (item.type === 'earth' && item.value === '土') {
-                                earthToMount(curIndex);
-                            }
-                        });
-                    }
-                }
-
-                earthToMount(index);
+                squares = mountCount(squares);
 
             }
         } else if (status === 'wind') {
@@ -275,7 +271,7 @@ export default class Game extends React.Component {
                     return;
                 }
                 // 不能替代山
-                if (squares[index].type === 'earth' && squares[index].value === '山') {
+                if (squares[index].type === 'mountain') {
                     return;
                 }
                 // 手中的风元素 - 1
@@ -291,13 +287,15 @@ export default class Game extends React.Component {
                     squares[index] = {
                         type: 'wind',
                         value: '风',
-                        number: squares[index].number + 1
+                        number: squares[index].number + 1,
+                        position: index
                     }
                 } else {
                     squares[index] = {
                         type: 'wind',
                         value: '风',
-                        number: 1
+                        number: 1,
+                        position: index
                     }
                 }
                 element.wind--;
@@ -316,7 +314,8 @@ export default class Game extends React.Component {
                 squares[index] = {
                     type: 'water',
                     value: '水',
-                    number: 1
+                    number: 1,
+                    position: index
                 }
                 element.water--;
                 let flowArray = [
@@ -327,18 +326,17 @@ export default class Game extends React.Component {
                 ]
                 let [row, col] = getPositionByIndex(index);
                 let river = flowArray.reduce((pre, cur) => {
-                    if (row + cur[0] < 0 || row + cur[0] > LINE_NUM ||
-                        col + cur[1] < 0 || col + cur[1] > LINE_NUM
-                    ) {
+                    if(isOutOfBoard(row + cur[0], col + cur[1])){
                         return pre;
                     }
+                    console.log('water',row + cur[0], col + cur[1])
                     let curIndex = getIndexByPosition(row + cur[0], col + cur[1]);
                     return squares[curIndex].type === 'water' ? [...pre, cur] : pre;
                 }, [])
                 if (river.length > 0) {
                     status = 'flow';
                     if (river.length > 1) {
-                        this.setState({
+                        this.updateDateAndSave({
                             flowPath: [[row, col]],
                             choose: {
                                 row,
@@ -347,7 +345,7 @@ export default class Game extends React.Component {
                             }
                         })
                     } else {
-                        this.setState({
+                        this.updateDateAndSave({
                             flowPath: [[row, col]]
                         })
                         this.onChangeChoose(river[0], [row, col]);
@@ -356,26 +354,22 @@ export default class Game extends React.Component {
                 }
             }
         }
-        this.setState({
+        this.updateDateAndSave({
             squares,
             element,
             bag,
             status
-        })
-        this.setState({
-            saveFlag: Date.now()
-        })
+        },true)
 
     }
 
     // 初始化游戏人数
     initPlayer() {
         let squares = [...this.state.squares];
-        squares[getIndexByPosition(4, 5)] = {type: 'Person', value: 'A', number: 1}
-        squares[getIndexByPosition(6, 5)] = {type: 'Person', value: 'B', number: 1}
-        this.setState({
-            squares
-        })
+        squares[getIndexByPosition(4, 5)] = {type: 'Person', value: 'A', number: 1,position:getIndexByPosition(4, 5)}
+        squares[getIndexByPosition(6, 5)] = {type: 'Person', value: 'B', number: 1,position:getIndexByPosition(6, 5)}
+        
+        this.updateDateAndSave({squares},true)
     }
 
     // 更改初始摸棋子的数目
@@ -383,7 +377,7 @@ export default class Game extends React.Component {
         if (this.state.elementNum + num < 1 || this.state.elementNum + num > MAX_ELEMENT_NUM - 1) {
             return;
         }
-        this.setState({
+        this.updateDateAndSave({
             elementNum: this.state.elementNum + num
         });
     }
@@ -416,17 +410,26 @@ export default class Game extends React.Component {
                 tempSum += bag[j]
             }
         }
-        this.setState({
+        // this.updateDateAndSave({
+        //     bag,
+        //     element: {
+        //         fire: results[0],
+        //         water: results[1],
+        //         wind: results[2],
+        //         earth: results[3],
+        //         move: MAX_ELEMENT_NUM - num
+        //     }
+        // },true);
+        this.updateDateAndSave({
             bag,
             element: {
                 fire: results[0],
-                water: results[1],
+                water: 10,
                 wind: results[2],
                 earth: results[3],
                 move: MAX_ELEMENT_NUM - num
-            },
-            saveFlag: Date.now()
-        })
+            }
+        },true);
 
     }
 
@@ -488,7 +491,7 @@ export default class Game extends React.Component {
                 if (!isWind && (rowOffset & colOffset) !== 0) {
                     let itemA = squares[getIndexByPosition(row + rowOffset, col)];
                     let itemB = squares[getIndexByPosition(row, col + colOffset)];
-                    if (itemA.value === '山' && itemB.value === '山') {
+                    if (itemA.type === 'mountain' && itemB.type === 'mountain') {
                         return;
                     }
                 }
@@ -497,7 +500,7 @@ export default class Game extends React.Component {
                 squares[index] = nextItem;
 
                 let move = this.state.element.move;
-                this.setState({
+                this.updateDateAndSave({
                     squares,
                     element: {
                         ...this.state.element,
@@ -506,27 +509,24 @@ export default class Game extends React.Component {
                 })
                 let [nextRow, nextCol] = getPositionByIndex(nextIndex);
                 if (move > 1) {
-                    this.setState({
+                    this.updateDateAndSave({
                         arrow: {
                             shape: 255,
                             isShow: true,
                             row: nextRow,
                             col: nextCol
                         }
-                    })
+                    },true)
                 } else {
-                    this.setState({
+                    this.updateDateAndSave({
                         arrow: {
                             shape: 255,
                             isShow: false,
                             row: nextRow,
                             col: nextCol
                         }
-                    })
+                    },true)
                 }
-                this.setState({
-                    saveFlag: Date.now()
-                })
             }
 
         } else if (status === 'flow') {
@@ -545,21 +545,22 @@ export default class Game extends React.Component {
                 squares[curIndex] = {
                     type: '',
                     number: 0,
-                    value: ''
+                    value: '',
+                    position: curIndex
                 };
                 // 浇灭的火元素回到袋子里
                 if (nextItem.type === 'fire') {
                     bag[0] += nextItem.number;
                 }
 
-                this.setState({
+                this.updateDateAndSave({
                     squares,
                     bag,
                     flowStep: flowStep - 1,
                     flowPath
                 })
                 if (flowStep > 1) {
-                    this.setState({
+                    this.updateDateAndSave({
                         arrow: {
                             shape: 90,
                             isShow: true,
@@ -568,7 +569,7 @@ export default class Game extends React.Component {
                         }
                     })
                 } else {
-                    this.setState({
+                    this.updateDateAndSave({
                         arrow: {
                             shape: 255,
                             isShow: false,
@@ -576,10 +577,7 @@ export default class Game extends React.Component {
                             col: col + colOffset
                         },
                         status: 'water'
-                    });
-                    this.setState({
-                        saveFlag: Date.now()
-                    })
+                    },true);
                 }
             }
         }
@@ -611,7 +609,7 @@ export default class Game extends React.Component {
                 isShow: false
             }
         }
-        this.setState({
+        this.updateDateAndSave({
             status,
             arrow
         })
@@ -628,8 +626,8 @@ export default class Game extends React.Component {
         }
         let curWater = firstWater;
         let squares = this.state.squares;
-        if (curWater[0] + status[0] < 0 || curWater[1] + status[1] < 0 ||
-            curWater[0] + status[0] > LINE_NUM || curWater[1] + status[1] > LINE_NUM) {
+        
+        if (isOutOfBoard(curWater[0] + status[0], curWater[1] + status[1])) {
             return;
         }
         if (squares[getIndexByPosition(curWater[0] + status[0], curWater[1] + status[1])].type !== 'water') {
@@ -637,10 +635,15 @@ export default class Game extends React.Component {
         }
 
         while (squares[getIndexByPosition(curWater[0] + status[0], curWater[1] + status[1])].type === 'water') {
+            
             curWater = [curWater[0] + status[0], curWater[1] + status[1]];
+           
             flowPath.push(curWater);
+            if (isOutOfBoard(curWater[0] + status[0], curWater[1] + status[1])) {
+                break;
+            }
         }
-        this.setState({
+        this.updateDateAndSave({
             flowPath,
             flowStep: flowPath.length,
             arrow: {
@@ -667,7 +670,7 @@ export default class Game extends React.Component {
         if (elementNum > 0 || this.state.status === 'flow') {
             return;
         }
-        this.setState({
+        this.updateDateAndSave({
             currentPlayer,
             status: 'init'
         })
